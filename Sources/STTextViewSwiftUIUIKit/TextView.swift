@@ -31,6 +31,7 @@ public struct TextView: SwiftUI.View, TextViewModifier {
     @Environment(\.colorScheme) private var colorScheme
     @Binding private var text: AttributedString
     @Binding private var selection: NSRange?
+    @Binding private var isFocused: Bool
     private let options: Options
     private let plugins: [any STPlugin]
 
@@ -42,11 +43,13 @@ public struct TextView: SwiftUI.View, TextViewModifier {
     public init(
         text: Binding<AttributedString>,
         selection: Binding<NSRange?> = .constant(nil),
+        isFocused: Binding<Bool> = .constant(false),
         options: Options = [],
         plugins: [any STPlugin] = []
     ) {
         _text = text
         _selection = selection
+        _isFocused = isFocused
         self.options = options
         self.plugins = plugins
     }
@@ -55,6 +58,7 @@ public struct TextView: SwiftUI.View, TextViewModifier {
         TextViewRepresentable(
             text: $text,
             selection: $selection,
+            isFocused: $isFocused,
             options: options,
             plugins: plugins
         )
@@ -69,12 +73,14 @@ private struct TextViewRepresentable: UIViewRepresentable {
 
     @Binding private var text: AttributedString
     @Binding private var selection: NSRange?
+    @Binding private var isFocused: Bool
     private let options: TextView.Options
     private var plugins: [any STPlugin]
 
-    init(text: Binding<AttributedString>, selection: Binding<NSRange?>, options: TextView.Options, plugins: [any STPlugin] = []) {
+    init(text: Binding<AttributedString>, selection: Binding<NSRange?>, isFocused: Binding<Bool>, options: TextView.Options, plugins: [any STPlugin] = []) {
         self._text = text
         self._selection = selection
+        self._isFocused = isFocused
         self.options = options
         self.plugins = plugins
     }
@@ -85,7 +91,13 @@ private struct TextViewRepresentable: UIViewRepresentable {
         textView.highlightSelectedLine = options.contains(.highlightSelectedLine)
         textView.isHorizontallyResizable = !options.contains(.wrapLines)
         textView.showsLineNumbers = options.contains(.showLineNumbers)
-
+        
+        textView.autocapitalizationType = .none
+        textView.autocorrectionType = .no
+        textView.smartDashesType = .no
+        textView.smartQuotesType = .no
+        textView.spellCheckingType = .no
+        
         context.coordinator.isUpdating = true
         textView.attributedText = NSAttributedString(styledAttributedString(textView.typingAttributes))
         context.coordinator.isUpdating = false
@@ -109,11 +121,17 @@ private struct TextViewRepresentable: UIViewRepresentable {
             context.coordinator.isDidChangeText = false
         }
 
-//        if textView.selectedRange() != selection, let selection {
-//            textView.setSelectedRange(selection)
-//            textView.setNeedsLayout()
-//        }
-
+        if isFocused && !textView.isFirstResponder {
+            textView.becomeFirstResponder()
+        } else if !isFocused && textView.isFirstResponder {
+            textView.resignFirstResponder()
+        }
+    
+        if textView.textSelection != selection, let selection = selection {
+            textView.textSelection = selection
+            textView.setNeedsLayout()
+        }
+                
         if textView.isEditable != isEnabled {
             textView.isEditable = isEnabled
             textView.setNeedsLayout()
